@@ -38,8 +38,5 @@
     "client": {
       "platform": "web"
     }
-  },
-  "dependencies": {
-    "dsh-web-mobile": "^3.2.1"
   }
 }
