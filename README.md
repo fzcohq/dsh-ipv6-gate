@@ -27,11 +27,17 @@
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | Phase 0 | 骨架（本目录） | ✅ |
-| Phase 1 | 反代 + Host 改写 + PIN 认证 + WS 透传（自签证书本机验证） | ⬜ |
-| Phase 2 | ACME DNS-01 真证书（acme-client + DuckDNS/dynv6） | ⬜ |
-| Phase 3 | DDNS 定时器（ipconfig 稳定地址解析，已在外部栈验证） | ⬜ |
-| Phase 4 | 设置页 + 二维码 + dsh-web-mobile(MIT) 移动样式 | ⬜ |
+| Phase 1 | 反代 + Host 改写 + PIN 认证 + WS 透传（自签证书本机验证） | ✅ 2026-11-04 |
+| P1.5 | 真机验收（桌面端宿主 + 手机蜂窝 + DSH 浏览器令牌对接） | ✅ 2026-11-04 |
+| Phase 2 | ACME DNS-01 真证书（acme-client + DuckDNS/dynv6），替代手搭栈 Caddy | ⬜ |
+| Phase 3 | DDNS 定时器（ipconfig 稳定地址解析，addr.js 已就绪） | ⬜ |
+| Phase 4 | 设置页 + 二维码 + 移动样式（client bundle 需 factory 返回带 apply 的对象） | ⬜ |
 | Phase 5 | 可选：transport shim 干净重写 / TOTP | ⬜ |
+
+### 真机验收记录（2026-11-04）
+
+- 手机蜂窝 → `http://cheese-house.duckdns.org:8445` → PIN → 完整 DSH 界面，**会话实时刷新（WS）正常**；
+- 服务端-only 架构排除渲染进程激活；三个崩溃根因与修复记录见 [docs/engineering-notes.md](docs/engineering-notes.md)。
 
 ## 许可证纪律（重要）
 

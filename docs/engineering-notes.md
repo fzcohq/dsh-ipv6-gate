@@ -1,0 +1,62 @@
+# 工程笔记：验证记录与崩溃复盘（2026-11-04）
+
+本文记录 `dsh-ipv6-gate` 在真实 DSH Desktop 0.2.1-rc.5 上从「装不上」到「手机可访问」过程中
+验证出的机制与踩过的坑。每条都对应一次真实崩溃或 401，修复均已进入代码与测试。
+
+## 1. 已验证的架构（真机）
+
+```
+手机(蜂窝 v6) ──HTTP/WS──> [::]:8445 dsh-ipv6-gate
+                             ├─ PIN 登录页（cookie=sha256(pin:sessionKey)）
+                             ├─ Host/Origin/Referer → 127.0.0.1:<DSH端口>
+                             ├─ WS upgrade 透传（含 method/path！）
+                             └─ 反代 → DSH webserver（端口从 ctx.webServer 自动获取）
+```
+
+- **DSH 端口每次启动随机变**：resolveUpstream 读取宿主服务，网关自动跟随（已实测跟随 55338→54498→62607→64598 等）。
+- **DSH 浏览器认证**（0.2.x 新增）：`dsh web` 打印的 URL 带 `?token=`（进程内存随机，不落盘）；
+  GET `/?token=` 校验通过后铸 Cookie（`dsh-auth-<sha256(Host authority)>`，HttpOnly，30 天，绑定 Host）。
+  本插件经 **官方 `connection` 服务** 的 `authenticatedUrl()` 取令牌，PIN 通过后重定向 `/?token=…` 让 DSH 替手机铸 Cookie；DSH 重启换令牌时检测 401 透明续登（带防循环护栏）。
+- **验证方法**：手机蜂窝直连 → 输 PIN → 连续两次 303 → 200 完整界面；WS `/api/remote.mux` 101 建立。
+
+## 2. 崩溃复盘（三个，都被真实日志证实）
+
+### #1 客户端 bundle 是 ESM → `SyntaxError: Unexpected token 'export'`
+- 日志：`...logs/crash-...-web-boot.log`：「web boot: 1 entry did not activate / dsh-ipv6-gate: import failed」
+- 原因：`lib/client.js` 写成 `export default {}`，而宿主客户端模块加载器要求
+  `window.__ModuleLoader__.load({ id, factory })` 的**普通脚本**（对照 dshmarket 的真实格式）。
+- 修复：v0.1.1 起彻底**去客户端化**（服务端-only）——移除 `dsh.client` 字段与 `lib/client.js`。
+- 教训：桌面端崩溃发生在**渲染进程激活 client 条目**，CLI/假 ctx 测试永远测不到；需看 `%APPDATA%\@deepseek-ai\dsh-desktop\logs\crash-*-web-boot.log`。
+
+### #2 client factory 返回空对象 → `invalid plugin, expect function or object with an "apply" method`
+- 原因：语法修好后 factory 返回 `{}`，客户端插件加载器要求返回**带 apply 的插件对象**；
+  渲染端 `bootFailed` → 主进程 `reportFatal("web-boot")` → 整机退出。
+- 修复：同 #1（服务端-only）；若未来加设置页，factory 必须返回 `{ apply() {} }`。
+
+### #3 未 inject 的服务访问 → 令牌永远取不到 → 手机见 `dsh web authentication required`
+- 原因：`getLaunchToken()` 中 `ctx.connection` 未声明在 `inject`，Cordis 直接抛
+  `cannot get property "connection" without inject`，被 catch 吞掉 → `token=null` → 重定向 `/` → DSH 401。
+- 修复：`inject: ['webServer', 'connection']`（服务依赖必须显式声明，软取不成立）。
+
+### #4（真机反馈）WS 一直重连 → 升级请求漏了路径
+- 原因：`onUpgrade` 里 `http.request({host, port, headers})` 默认 **GET `/`**，所有 WS 升级打到根路径 → 400 → 前端无限重连。
+- 修复：传入 `method` 与 `path: req.url`；新增两条 WS 回归测试 + `tools/wsprobe.mjs` 探针。
+- 验证：对真实 DSH，直连与经网关均 **101 + Sec-WebSocket-Accept**；无 Cookie 401。
+
+## 3. 验证工具链（可复用）
+
+| 工具 | 用途 |
+|---|---|
+| `npm test`（node:test，25 项） | auth/rewrite/addr/login-page/server（含 WS 回归） |
+| `node tools/preflight.mjs <上游端口> <本地端口>` | 假 ctx 真跑 apply；断言登录页 200 + 服务端-only |
+| `node tools/wsprobe.mjs <端口> "<cookie>" [path]` | 完整 WS 握手探针（101/401/400） |
+| `node smoke.mjs --tls --port 8445 --host ::` | 指向真实 DSH 的独立冒烟网关 |
+| crashlab（`~\.dsh-crashlab` + `dsh --profile crashlab`） | 隔离 DSH_HOME 复现真实宿主组合；**desktop profile 被 Electron 独占，CLI 无法直接 boot** |
+
+## 4. 待办提醒
+
+- P2：`acme-client` + DNS-01（DuckDNS/dynv6），证书放 `$DSH_HOME/dsh-ipv6-gate/certs`，续期内建定时器；
+  届时网关可直接 HTTPS，替代手搭的 Caddy/acme.sh。
+- P3：DDNS 定时器复用 `lib/addr.js`（已含真实 ipconfig fixture 测试）。
+- P4：设置页 client bundle（factory 返回 `{ apply() {} }`），二维码、PIN 轮换；移动样式从 dsh-web-mobile(MIT) 引入。
+- 当前 8445 是 **HTTP dev 模式**；生产 8443 仍是手搭 Caddy 栈，两者并存。
