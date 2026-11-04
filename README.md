@@ -1,6 +1,6 @@
-# dsh-v6-gate
+# dsh-ipv6-gate
 
-**IPv6 直连网关插件**：DDNS + ACME HTTPS + 认证反代，把 DeepSeek Harness 零中继暴露给公网 IPv6。
+**IPv6 远程访问网关插件**：DDNS + ACME HTTPS + 认证反代，把 DeepSeek Harness 零中继暴露到公网 IPv6。
 
 ## 为什么做这个
 

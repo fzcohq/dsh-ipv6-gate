@@ -1,7 +1,7 @@
 {
-  "name": "dsh-v6-gate",
+  "name": "dsh-ipv6-gate",
   "version": "0.1.0",
-  "description": "IPv6 直连网关插件：DDNS + ACME HTTPS + 认证反代，把 DeepSeek Harness 零中继暴露给公网 IPv6（免费、无第三方流量经手）。IPv6 direct gateway for DSH: DDNS + ACME TLS + auth reverse proxy, no relay in the data path.",
+  "description": "IPv6 远程访问网关插件：DDNS + ACME HTTPS + 认证反代，把 DeepSeek Harness 零中继暴露到公网 IPv6（免费、数据不经第三方）。IPv6 remote-access gateway for DSH: DDNS + ACME TLS + auth reverse proxy, no relay in the data path.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -18,12 +18,15 @@
     "deepseek-harness",
     "dsh",
     "dsh-plugin",
-    "ipv6",
+    "remote",
     "remote-access",
+    "ipv6",
     "ddns",
     "acme",
     "lets-encrypt",
-    "reverse-proxy"
+    "reverse-proxy",
+    "手机远程",
+    "远程访问"
   ],
   "dsh": {
     "bundle": {
@@ -33,5 +36,7 @@
       "platform": "web"
     }
   },
-  "dependencies": {}
+  "dependencies": {
+    "dsh-web-mobile": "^3.2.1"
+  }
 }
