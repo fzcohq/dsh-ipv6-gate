@@ -60,3 +60,22 @@
 - P3：DDNS 定时器复用 `lib/addr.js`（已含真实 ipconfig fixture 测试）。
 - P4：设置页 client bundle（factory 返回 `{ apply() {} }`），二维码、PIN 轮换；移动样式从 dsh-web-mobile(MIT) 引入。
 - 当前 8445 是 **HTTP dev 模式**；生产 8443 仍是手搭 Caddy 栈，两者并存。
+
+## 5. P2 验收记录（2026-11-04，ALL PASS）
+
+`node tools/verify-p2.mjs` 对 `https://cheese-house.duckdns.org:8445` 逐项检查：
+
+| 项 | 结果 | 说明 |
+|---|---|---|
+| ALPN | h2 | 74 个 client bundle 走单连接多路复用 |
+| 证书 | 与磁盘一致，CN=cheese-house | `$DSH_HOME\dsh-ipv6-gate\certs` |
+| 剩余天数 | 90 | <30 天自动续期 + setSecureContext 热更新 |
+| 登录链路 | 200→303(token)→303(dsh-auth)→200 首页 | 与 P1.5 相同 |
+| 缓存头 | `public, max-age=31536000, immutable` | 带哈希 assets 与 /plugins/*/client.js |
+| 压缩 | gzip | 上游压缩透传 |
+| h2 请求 | 200 | http2 客户端 |
+| WS 升级 | 101 | 走 h1 分支 |
+
+ACME 真实签发耗时 51s（DNS-01 + DuckDNS），证书有效期 90 天。
+
+**验收脚本自身踩的坑**（已修复，留档）：资源路径 `./assets/…` 需归一化为 `/assets/…`；WS 探针必须带 `Sec-WebSocket-Key`/`Sec-WebSocket-Version`，否则真实 WS 服务器回 400。
