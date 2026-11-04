@@ -28,6 +28,9 @@
     "手机远程",
     "远程访问"
   ],
+  "scripts": {
+    "test": "node --test"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
