@@ -2,6 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import https from 'node:https';
+import http2 from 'node:http2';
+import selfsigned from 'selfsigned';
 import { createGate } from '../lib/server.js';
 
 test('WebSocket 升级：路径透传 + 101 转发 + 双向数据（2026-11-04 手机“一直重新连接”回归）', async () => {
@@ -240,5 +243,78 @@ test('上游不可达 → 502', async () => {
     server.close();
   } finally {
     try { gate.server.close(); } catch {}
+  }
+});
+
+test('TLS + ALPN：h2 与 h1 同端口，WS 走 h1 升级（P2 核心）', async () => {
+  const pems = await selfsigned.generate([{ name: 'commonName', value: 'localhost' }], { keyType: 'rsa', keySize: 2048, notAfterDate: new Date(Date.now() + 30 * 86400000) });
+  const upstream = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ host: req.headers.host, path: req.url }));
+  });
+  upstream.on('upgrade', (req, socket) => {
+    socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n');
+    socket.on('data', (d) => socket.write(Buffer.concat([Buffer.from('echo:'), d])));
+    socket.on('error', () => {});
+  });
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+  const gate = createGate({ pin: 'test1234', port: 0, upstreamPort: upstream.address().port, tls: { cert: pems.cert, key: pems.private } });
+  await new Promise((r) => gate.server.listen(0, '127.0.0.1', r));
+  const port = gate.server.address().port;
+  const cookie = `gate_token=${gate.auth.cookieValue()}`;
+  try {
+    const h2res = await new Promise((resolve, reject) => {
+      const c = http2.connect(`https://127.0.0.1:${port}`, { rejectUnauthorized: false });
+      c.on('error', reject);
+      const req = c.request({ ':path': '/api/x', ':method': 'GET', cookie });
+      req.on('response', (h) => resolve({ status: h[':status'], alpn: c.alpnProtocol }));
+      req.end();
+    });
+    assert.equal(h2res.alpn, 'h2');
+    assert.equal(h2res.status, 200);
+
+    const h1status = await new Promise((resolve, reject) => {
+      const req = https.request({ host: '127.0.0.1', port, path: '/api/y', rejectUnauthorized: false, headers: { cookie } });
+      req.on('response', (res) => { res.resume(); resolve(res.statusCode); });
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(h1status, 200);
+
+    const wsReply = await new Promise((resolve, reject) => {
+      const req = https.request({ host: '127.0.0.1', port, path: '/api/remote.mux?x=1', rejectUnauthorized: false, headers: { connection: 'Upgrade', upgrade: 'websocket', cookie } });
+      req.on('upgrade', (res, socket) => {
+        socket.write('ping');
+        socket.once('data', (d) => { resolve(d.toString()); socket.destroy(); });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(wsReply, 'echo:ping');
+  } finally {
+    gate.server.close();
+    upstream.close();
+  }
+});
+
+test('缓存头：带哈希 assets 返回 immutable，普通 API 不加', async () => {
+  const upstream = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+  const gate = createGate({ pin: 'test1234', port: 0, upstreamPort: upstream.address().port });
+  await new Promise((r) => gate.server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${gate.server.address().port}`;
+  const cookie = `gate_token=${gate.auth.cookieValue()}`;
+  try {
+    const asset = await fetch(`${base}/assets/index-abc12345.js`, { headers: { cookie } });
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers.get('cache-control') || '', /immutable/);
+    const api = await fetch(`${base}/api/session`, { headers: { cookie } });
+    assert.notEqual(api.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  } finally {
+    gate.server.close();
+    upstream.close();
   }
 });
