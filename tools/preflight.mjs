@@ -36,26 +36,30 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 //
 
 // 客户端 bundle 校验：必须是 __ModuleLoader__ 普通脚本（不能 ESM），factory 必须返回带 apply 的对象
-const clientExists = existsSync(new URL('../lib/client.js', import.meta.url));
+// client.js 位置与 dsh-pocket/dshmarket 一致：client/client.js
+const clientPath = new URL('../client/client.js', import.meta.url);
+const clientExists = existsSync(clientPath);
 let clientOk = false;
 if (clientExists) {
-  const clientSrc = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
+  const clientSrc = readFileSync(clientPath, 'utf8');
   const hasLoader = clientSrc.includes('window.__ModuleLoader__.load');
   const notEsm = !/^\s*(import|export)\s/m.test(clientSrc);
   const hasApply = clientSrc.includes('apply');
-  clientOk = hasLoader && notEsm && hasApply;
+  const hasInject = clientSrc.includes('inject');
+  clientOk = hasLoader && notEsm && hasApply && hasInject;
   console.log(hasLoader ? 'PASS: client.js 使用 __ModuleLoader__.load' : 'FAIL: client.js 缺少 __ModuleLoader__.load');
   console.log(notEsm ? 'PASS: client.js 是普通脚本（非 ESM）' : 'FAIL: client.js 含 ESM 语法');
   console.log(hasApply ? 'PASS: client.js 含 apply 方法' : 'FAIL: client.js 缺少 apply');
+  console.log(hasInject ? 'PASS: client.js 含 inject 声明' : 'FAIL: client.js 缺少 inject（会导致 cannot get property without inject）');
 } else {
-  console.log('SKIP: 无 lib/client.js（纯服务端模式）');
+  console.log('SKIP: 无 client/client.js（纯服务端模式）');
   clientOk = true;
 }
 
 // package.json 校验：client 字段与文件一致
 const pkgHasClient = Boolean(pkg.dsh?.client);
 console.log(pkgHasClient === clientExists
-  ? 'PASS: dsh.client 与 lib/client.js 一致'
-  : `FAIL: dsh.client=${pkgHasClient} vs client.js=${clientExists}`);
+  ? 'PASS: dsh.client 与 client/client.js 一致'
+  : `FAIL: dsh.client=${pkgHasClient} vs client/client.js=${clientExists}`);
 
 process.exit(ok && clientOk && pkgHasClient === clientExists ? 0 : 1);
