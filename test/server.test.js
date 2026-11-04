@@ -96,6 +96,57 @@ test('锁定期间非登录路径也返回 429', async () => {
   }
 });
 
+test('DSH 启动令牌对接：PIN 成功后重定向 /?token=…，由上游铸 Cookie', async () => {
+  const up = await startUpstream();
+  const gate = await startGate(up.port, { getLaunchToken: () => 'LAUNCH123' });
+  try {
+    const res = await fetch(`${gate.base}/__gate/login`, {
+      method: 'POST', body: 'pin=test1234', headers: FORM, redirect: 'manual',
+    });
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get('location'), '/?token=LAUNCH123');
+    // gate Cookie 也同时下发
+    assert.match(res.headers.getSetCookie()[0], /gate_token=/);
+  } finally {
+    gate.server.close();
+    up.server.close();
+  }
+});
+
+test('透明续登：上游 401 且为文档导航时 303 到 token URL（且不循环）', async () => {
+  // 模拟 DSH 浏览器认证：无凭据 GET / → 401；带 ?token=LAUNCH123 → 303 './' + set-cookie
+  const dsh = http.createServer((req, res) => {
+    if (req.url.startsWith('/?token=LAUNCH123')) {
+      res.writeHead(303, { location: './', 'set-cookie': 'dsh-auth-x=signed; Path=/; HttpOnly' });
+      return res.end();
+    }
+    res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('dsh web authentication required; reopen the URL printed by dsh web.\n');
+  });
+  await new Promise((r) => dsh.listen(0, '127.0.0.1', r));
+  const gate = await startGate(dsh.address().port, { getLaunchToken: () => 'LAUNCH123' });
+  try {
+    // 1) 已过 gate 认证的文档请求遇到上游 401 → 303 到 token URL
+    let res = await fetch(`${gate.base}/`, {
+      headers: { cookie: `gate_token=${gate.auth.cookieValue()}`, accept: 'text/html' },
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get('location'), '/?token=LAUNCH123');
+    // 2) 该 token 请求经反代：模拟 DSH 铸 Cookie 后 303 './'（透传 set-cookie 给浏览器）
+    res = await fetch(`${gate.base}/?token=LAUNCH123`, {
+      headers: { cookie: `gate_token=${gate.auth.cookieValue()}`, accept: 'text/html' },
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get('location'), './');
+    assert.match(res.headers.getSetCookie()[0], /dsh-auth-x=/);
+  } finally {
+    gate.server.close();
+    dsh.close();
+  }
+});
+
 test('上游不可达 → 502', async () => {
   // 占一个空闲端口然后关掉，保证不可达
   const holder = http.createServer(() => {});

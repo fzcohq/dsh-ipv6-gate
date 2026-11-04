@@ -3,3 +3,6 @@ certs/
 *.log
 .env
 dist/
+package/
+*.tgz
+smoke-body.txt
