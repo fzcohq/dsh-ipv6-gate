@@ -96,3 +96,10 @@ ACME 真实签发耗时 51s（DNS-01 + DuckDNS），证书有效期 90 天。
 **处置**：`dsh plugin --profile desktop add dsh-web-mobile`（MIT，⭐178，independently maintained），作为普通 profile 插件对**所有入口**生效（8443 与 8445 同用）。安装后用户实测：两者顺滑度基本无差异。
 
 **结论**：插件栈在性能与体验上与手搭栈持平或更优；剩余差异仅为 pocket 的 transport shim（可选，未复刻）。
+
+## 7. P3 验收记录（2026-11-04）
+
+- `lib/ddns.js`：探测稳定 IPv6（win32 用 ipconfig + 已测试的 parseStableIpv6；Linux 走 `ip -6 addr` 兜底）→ 与 `ddns-state.json` 比对 → 有变化才调 DuckDNS AAAA 接口；失败只记日志与状态，绝不抛。
+- `node tools/ddns-update.mjs <domain> <token> --force` 实测：`240e:b8f:423:7500:32e9:4c9f:d2bb:381c` 探测正确、AAAA 更新成功、DNS 解析即刻一致。
+- 插件内默认随 TLS 配置启用（复用同一 DuckDNS token），每小时检查一次；`ctx.on('dispose')` 清理定时器。
+- 43/43 单测通过（新增 5 项 DDNS：首次更新/无变化跳过/force/探测失败/API 失败不抛出）。
