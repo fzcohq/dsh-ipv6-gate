@@ -79,3 +79,20 @@
 ACME 真实签发耗时 51s（DNS-01 + DuckDNS），证书有效期 90 天。
 
 **验收脚本自身踩的坑**（已修复，留档）：资源路径 `./assets/…` 需归一化为 `/assets/…`；WS 探针必须带 `Sec-WebSocket-Key`/`Sec-WebSocket-Version`，否则真实 WS 服务器回 400。
+
+## 6. P2.5 手感对比与移动层（2026-11-04）
+
+**测量**（同一 3MB JSON `/dsh-market/registry`，两端均为 gzip 3,043,579 字节）：
+
+| 入口 | 耗时（本机回环） |
+|---|---|
+| 8443（Caddy + dsh-pocket） | 5.13s |
+| 8445（dsh-ipv6-gate 单进程） | **2.20s** |
+
+结论：网络层插件栈更快（少一跳、无 Caddy 二次转发）；压缩方式相同（均 gzip，未使用 brotli）。
+
+**差异根因**：8443 的"跟手"来自 pocket 注入的 dsh-web-mobile 移动端适配层（窄屏布局/触控/输入框防缩放），而 8445 当时是桌面布局。
+
+**处置**：`dsh plugin --profile desktop add dsh-web-mobile`（MIT，⭐178，independently maintained），作为普通 profile 插件对**所有入口**生效（8443 与 8445 同用）。安装后用户实测：两者顺滑度基本无差异。
+
+**结论**：插件栈在性能与体验上与手搭栈持平或更优；剩余差异仅为 pocket 的 transport shim（可选，未复刻）。
