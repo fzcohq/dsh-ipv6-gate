@@ -28,7 +28,7 @@
     "远程访问"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test --test-force-exit"
   },
   "dsh": {
     "bundle": {

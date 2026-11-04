@@ -4,6 +4,82 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createGate } from '../lib/server.js';
 
+test('WebSocket 升级：路径透传 + 101 转发 + 双向数据（2026-11-04 手机“一直重新连接”回归）', async () => {
+  // 假上游：echo 升级，并记录收到的路径
+  const seenPaths = [];
+  const upstream = http.createServer((req, res) => { res.writeHead(404); res.end(); });
+  upstream.on('upgrade', (req, socket) => {
+    seenPaths.push(req.url);
+    socket.write(
+      'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n',
+    );
+    socket.on('data', (d) => socket.write(Buffer.concat([Buffer.from('echo:'), d])));
+    socket.on('error', () => {});
+  });
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+
+  const gate = createGate({ pin: 'test1234', port: 0, upstreamPort: upstream.address().port });
+  await new Promise((r) => gate.server.listen(0, '127.0.0.1', r));
+  const gatePort = gate.server.address().port;
+
+  try {
+    const { status, reply } = await new Promise((resolve, reject) => {
+      const req = http.request({
+        host: '127.0.0.1',
+        port: gatePort,
+        path: '/api/remote.mux?x=1',
+        headers: {
+          connection: 'Upgrade',
+          upgrade: 'websocket',
+          cookie: `gate_token=${gate.auth.cookieValue()}`,
+        },
+      });
+      req.on('upgrade', (res, socket) => {
+        socket.write('ping');
+        socket.once('data', (d) => {
+          resolve({ status: res.statusCode, reply: d.toString() });
+          socket.destroy();
+        });
+      });
+      req.on('response', (res) => reject(new Error(`upstream refused: ${res.statusCode}`)));
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(status, 101);
+    assert.equal(reply, 'echo:ping');
+    assert.deepEqual(seenPaths, ['/api/remote.mux?x=1'], '升级路径与查询串必须原样转发');
+  } finally {
+    gate.server.close();
+    upstream.close();
+  }
+});
+
+test('未认证的 WebSocket 升级被拒绝', async () => {
+  const upstream = http.createServer((req, res) => { res.writeHead(404); res.end(); });
+  upstream.on('upgrade', () => assert.fail('未认证请求不应到达上游'));
+  await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+  const gate = createGate({ pin: 'test1234', port: 0, upstreamPort: upstream.address().port });
+  await new Promise((r) => gate.server.listen(0, '127.0.0.1', r));
+  try {
+    const outcome = await new Promise((resolve) => {
+      const req = http.request({
+        host: '127.0.0.1',
+        port: gate.server.address().port,
+        path: '/api/remote.mux',
+        headers: { connection: 'Upgrade', upgrade: 'websocket' },
+      });
+      req.on('upgrade', () => resolve('upgraded'));
+      req.on('response', (res) => resolve(`status:${res.statusCode}`));
+      req.on('error', () => resolve('error'));
+      req.end();
+    });
+    assert.notEqual(outcome, 'upgraded');
+  } finally {
+    gate.server.close();
+    upstream.close();
+  }
+});
+
 function startUpstream() {
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
