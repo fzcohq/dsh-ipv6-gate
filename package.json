@@ -36,6 +36,7 @@
     }
   },
   "dependencies": {
+    "@deepseek-ai/schemastery": "^3.19.0",
     "acme-client": "^5.4.0"
   },
   "devDependencies": {
