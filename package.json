@@ -1,0 +1,37 @@
+{
+  "name": "dsh-v6-gate",
+  "version": "0.1.0",
+  "description": "IPv6 直连网关插件：DDNS + ACME HTTPS + 认证反代，把 DeepSeek Harness 零中继暴露给公网 IPv6（免费、无第三方流量经手）。IPv6 direct gateway for DSH: DDNS + ACME TLS + auth reverse proxy, no relay in the data path.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "ipv6",
+    "remote-access",
+    "ddns",
+    "acme",
+    "lets-encrypt",
+    "reverse-proxy"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "dependencies": {}
+}
