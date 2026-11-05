@@ -109,9 +109,9 @@ window.__ModuleLoader__.load({
 .ra-btn{display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--ra-border);background:var(--ra-raised);color:var(--ra-fg);font-size:12.5px;font-weight:500;transition:background .15s ease,border-color .15s ease;flex:none}
 .ra-btn:hover{background:var(--ra-fg-faint);border-color:color-mix(in oklch,var(--ra-fg) 32%,var(--ra-border))}
 .ra-btn:active{background:color-mix(in oklch,var(--ra-fg) 10%,var(--ra-raised))}
-.ra-btn-solid{background:var(--ra-fg);border-color:var(--ra-fg);color:var(--ra-surface)}
-.ra-btn-solid:hover{background:color-mix(in oklch,var(--ra-fg) 88%,var(--ra-bg));border-color:transparent}
-.ra-btn-solid:active{background:color-mix(in oklch,var(--ra-fg) 80%,var(--ra-bg));border-color:transparent}
+.ra-root .ra-btn-solid{background:var(--ra-fg);border-color:var(--ra-fg);color:var(--ra-surface)!important}
+.ra-root .ra-btn-solid:hover{background:color-mix(in oklch,var(--ra-fg) 88%,var(--ra-bg));border-color:transparent}
+.ra-root .ra-btn-solid:active{background:color-mix(in oklch,var(--ra-fg) 80%,var(--ra-bg));border-color:transparent}
 @container ra (max-width:560px){.ra-panel-body{grid-template-columns:1fr;gap:18px}.ra-qr-col{flex-direction:column;align-items:center;gap:9px}.ra-qr{width:min(240px,100%);flex:none;padding:10px;border-radius:10px}.ra-qr-cap{text-align:center}}
 @container ra (max-width:520px){.ra-h1{font-size:19px}.ra-input-flat{font-size:16px}.ra-input-suffix{font-size:11.5px;padding-right:8px}.ra-addr-row{gap:4px 8px}.ra-code{font-size:12px}.ra-field-hint{display:none}.ra-pw-actions{justify-content:flex-end}.ra-input{font-size:16px}}
 @media (pointer:coarse){.ra-btn{height:40px;padding-inline:14px}.ra-link{display:inline-flex;align-items:center;min-height:44px;padding:0 8px}.ra-field-value .ra-link{min-height:40px}.ra-input-group .ra-link{min-height:40px}.ra-input-flat{height:40px}}
@@ -123,6 +123,46 @@ window.__ModuleLoader__.load({
     var PW_RE = /^[A-Za-z0-9_-]{8,24}$/;
     var DOMAIN_RE = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
     var TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    /* ═══ DSH 主题检测：跟随宿主深/浅色 ═══ */
+    function useDshTheme() {
+      var themeSt = React.useState('light');
+      var theme = themeSt[0]; var setTheme = themeSt[1];
+
+      React.useEffect(function() {
+        var detect = function() {
+          // 1) DSH 的 data-theme 属性
+          var el = document.documentElement || document.body;
+          var dt = el.getAttribute && (el.getAttribute('data-theme') || el.getAttribute('data-color-mode'));
+          if (dt === 'dark') return setTheme('dark');
+          if (dt === 'light') return setTheme('light');
+          // 2) CSS color-scheme 属性（DSH 设置了它跟随主题）
+          try {
+            var cs = getComputedStyle(el).colorScheme || '';
+            if (cs.includes('dark')) return setTheme('dark');
+            if (cs.includes('light')) return setTheme('light');
+          } catch(e) {}
+          // 3) prefers-color-scheme
+          if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return setTheme('dark');
+          }
+          setTheme('light');
+        };
+        detect();
+        // 监听系统主题变化
+        var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+        if (mq && mq.addEventListener) mq.addEventListener('change', detect);
+        // 监听 DOM 属性变化（DSH 切换主题时改属性）
+        var observer = new MutationObserver(detect);
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-color-mode', 'class', 'style'] });
+        return function() {
+          if (mq && mq.removeEventListener) mq.removeEventListener('change', detect);
+          observer.disconnect();
+        };
+      }, []);
+
+      return theme;
+    }
 
     function normaliseDomain(v) {
       return String(v || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase()
@@ -250,18 +290,21 @@ window.__ModuleLoader__.load({
       var nudging = nudgeSt[0]; var fireNudge = nudgeSt[1];
       React.useEffect(function(){ return function(){ clearTimeout(nudgeT.current); }; },[]);
 
+      // gate 只阻止"打开"，"关闭"始终允许
+      var gateActive = props.gate && props.gate.active && !props.desired;
+
       return h('section',{className:'ra-row'},
         h('div',{className:'ra-row-head'},
           h('div',{className:'ra-row-body'},
             h('h2',{className:'ra-row-title',id:titleId},props.title),
             h('p',{className:'ra-row-desc'},props.description),
             props.warn?h(WarnLine,{text:props.warn}):null,
-            props.gate&&props.gate.active?h('p',{className:'ra-note'+(nudging?' is-nudge':'')},props.gate.message):null,
+            props.gate&&props.gate.active&&!props.desired?h('p',{className:'ra-note'+(nudging?' is-nudge':'')},props.gate.message):null,
             props.readyNote?h('p',{className:'ra-note is-ok',role:'status'},props.readyNote):null),
           h(Switch,{titleId:titleId,panelId:panelId,checked:props.open,
-            disabled:props.gate?props.gate.active:false,
+            disabled:gateActive,
             onToggle:function(){
-              if(props.gate&&props.gate.active){fireNudge(true);clearTimeout(nudgeT.current);nudgeT.current=setTimeout(function(){fireNudge(false);},900);return;}
+              if(gateActive){fireNudge(true);clearTimeout(nudgeT.current);nudgeT.current=setTimeout(function(){fireNudge(false);},900);return;}
               props.onToggle(!props.desired);
             }})),
         h(Expand,{open:props.open},
@@ -395,7 +438,7 @@ window.__ModuleLoader__.load({
       var d = s.data || {};
       var ipv6Status = checking ? 'checking' : (d.ipv6 ? 'ok' : 'error');
       var v6ok = Boolean(d.ipv6);
-      var domainHost = domainName ? domainName+'.duckdns.org' : '';
+      var domainHost = (d.domain && d.domain.host) || (domainName ? domainName+'.duckdns.org' : '');
       var hasDomain = Boolean(domainName);
       var httpOpen = v6ok && httpOn;
       var httpsOpen = v6ok && hasDomain && httpsOn;
@@ -406,6 +449,9 @@ window.__ModuleLoader__.load({
       var httpGate = !v6ok ? {active:true,message:checking?'正在检测 IPv6 地址…':'未获取到 IPv6 地址。'} : {active:false};
       var httpsGate = !v6ok ? {active:true,message:checking?'正在检测 IPv6 地址…':'未获取到 IPv6 地址。'}
         : !hasDomain ? {active:true,message:'尚未设置域名，先配置域名后才能开启。'}
+        : domainStatus === 'configuring' ? {active:true,message:'正在配置域名（DDNS + 证书签发）…完成后即可开启。'}
+        : domainStatus === 'error' ? {active:true,message:'域名配置失败，请修改后重试。'}
+        : !d.https || !d.https.hasCert ? {active:true,message:'证书尚未就绪。'}
         : {active:false};
 
       var openDomain = function(){
@@ -427,7 +473,9 @@ window.__ModuleLoader__.load({
         post('setDomain',{name:name,token:token}).then(refresh);
       };
 
-      return h('div',{className:'ra-root'},h('style',null,CSS),
+      var dshTheme = useDshTheme();
+
+      return h('div',{className:'ra-root','data-theme':dshTheme},h('style',null,CSS),
         h('div',{className:'ra-wrap'},
           h('header',{className:'ra-head'},
             h('p',{className:'ra-eyebrow'},h('span',{className:'ra-eyebrow-mark'}),'手机 IPv6 远程访问'),
