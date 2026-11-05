@@ -401,6 +401,7 @@ window.__ModuleLoader__.load({
       var dSavedT = React.useRef(0);
       var dSavedSt = React.useState(false); var dSaved = dSavedSt[0]; var fireDSaved = dSavedSt[1];
       var checkingSt = React.useState(false); var checking = checkingSt[0]; var setChecking = checkingSt[1];
+      var dshTheme = useDshTheme();  // ← 必须在所有 early return 之前
 
       var refresh = React.useCallback(function() {
         return fetch('/__gate-config').then(function(r){return r.json();}).then(function(d){
@@ -472,8 +473,6 @@ window.__ModuleLoader__.load({
         clearTimeout(dSavedT.current); dSavedT.current=setTimeout(function(){fireDSaved(false);},2400);
         post('setDomain',{name:name,token:token}).then(refresh);
       };
-
-      var dshTheme = useDshTheme();
 
       return h('div',{className:'ra-root','data-theme':dshTheme},h('style',null,CSS),
         h('div',{className:'ra-wrap'},
