@@ -451,8 +451,6 @@ window.__ModuleLoader__.load({
       var httpsGate = !v6ok ? {active:true,message:checking?'正在检测 IPv6 地址…':'未获取到 IPv6 地址。'}
         : !hasDomain ? {active:true,message:'尚未设置域名，先配置域名后才能开启。'}
         : domainStatus === 'configuring' ? {active:true,message:'正在配置域名（DDNS + 证书签发）…完成后即可开启。'}
-        : domainStatus === 'error' ? {active:true,message:'域名配置失败，请修改后重试。'}
-        : !d.https || !d.https.hasCert ? {active:true,message:'证书尚未就绪。'}
         : {active:false};
 
       var openDomain = function(){
