@@ -24,11 +24,32 @@
 
 ## 安装
 
+### 方式一：插件市场（推荐，最简单）
+
+如果你已安装 [dsh-market](https://github.com/dsh-market/dsh-market)（插件市场）：
+
+1. 打开 DSH → 设置 → **插件** → **插件市场** 标签
+2. 搜索 `ipv6` 或 `远程访问`
+3. 点击 **安装**
+4. 重启 DSH
+
+### 方式二：命令行（无需插件市场）
+
+在终端执行：
+
 ```sh
-dsh plugin --profile <你的profile> add github:<你的用户名>/dsh-ipv6-gate
+dsh plugin add github:fzcohq/dsh-ipv6-gate
 ```
 
-重启 DSH 后，设置里出现「手机 IPv6 远程访问」页签。
+> **桌面版用户**：如果上面命令安装后设置页没出现插件，改用：
+> ```sh
+> dsh plugin --profile desktop add github:fzcohq/dsh-ipv6-gate
+> ```
+> 然后重启桌面端。
+
+### 安装后
+
+重启 DSH，设置里会出现 **「手机 IPv6 远程访问」** 页签。
 
 ## 配置（三步）
 
