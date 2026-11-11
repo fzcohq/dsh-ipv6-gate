@@ -93,15 +93,18 @@ dsh plugin add github:fzcohq/dsh-ipv6-gate
 
 | 条件 | 说明 |
 |---|---|
-| 电脑有公网 IPv6 | 国内电信/移动/联通家宽普遍已分配（检测见设置页） |
+| 电脑有公网 IPv6 | 国内电信/移动/联通家宽普遍已分配；Windows / Linux / macOS 均可自动探测 |
 | 手机有 IPv6 | 4G/5G 蜂窝网络默认支持；WiFi 需路由器开启 IPv6 |
-| 路由器防火墙 | 需允许入站 8787/8788 端口（多数家宽默认放行高位端口） |
+| 路由器防火墙 | 需放行入站 TCP 8787（HTTPS）/ 8788（HTTP） |
+| DuckDNS 账户 | 免费子域名 + Token（DNS-01 证书验证与 DDNS 共用） |
+
+> **自动更新 AAAA**：无论域名是在设置页填写，还是在 `cordis.patch.yml` 里通过 `ddns` / `tls` 配置，插件都会启动 DDNS 定时器（每小时检查，地址变化才调用 API）。
 
 ## 开发
 
 ```sh
 npm install
-npm test                          # 46 tests
+npm test                          # 52 tests
 node tools/preflight.mjs <port>   # 部署预检
 ```
 
