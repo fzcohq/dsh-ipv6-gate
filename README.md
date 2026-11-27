@@ -100,6 +100,37 @@ dsh plugin add github:fzcohq/dsh-ipv6-gate
 
 > **自动更新 AAAA**：无论域名是在设置页填写，还是在 `cordis.patch.yml` 里通过 `ddns` / `tls` 配置，插件都会启动 DDNS 定时器（每小时检查，地址变化才调用 API）。
 
+## 常见问题
+
+### 手机能聊天，但上传文件失败？
+
+**当前版本已自动处理，无需任何操作。**
+
+原因：DSH 前端默认用 `blob:` Web Worker + XHR 上传文件；iOS 的 WKWebView 内核（Safari、夸克、微信等）对 blob Worker 支持存在缺陷，上传请求根本发不出去（表现为"立刻失败"或提示 `dsh web authentication required`）。
+
+本插件会在页面 HTML 中注入 `__DSH_FILE_UPLOAD__` 钩子，让上传改走普通 `fetch`，桌面与手机行为一致。
+
+### 更新后页面白屏 / 手机打不开？
+
+已修复。旧版本注入脚本时把 gzip 压缩的 HTML 当作 UTF-8 字符串处理，导致响应字节损坏、浏览器解压失败（白屏或"连不上"）。当前版本会**先解压再注入**，并去掉压缩头以明文发送。
+
+请确认安装的是最新版（含 2026-11-27 及之后的修复）：重新执行安装命令即可更新。
+
+### 页面能打开，但手机连不上 / 一直转圈？
+
+按顺序排查：
+
+1. **关闭 VPN** —— 多数 VPN 会接管 IPv6，导致无法直连（最常见原因）
+2. 确认手机有公网 IPv6：浏览器访问 [test-ipv6.com](https://test-ipv6.com)
+3. 蜂窝数据与 WiFi 各试一次——部分路由器不转发 IPv6 或未给手机分配 IPv6
+4. 检查路由器防火墙是否放行入站 TCP 8787（HTTPS）/ 8788（HTTP）
+
+### 证书签发失败？
+
+- 确认 DuckDNS Token 正确（36 位 UUID，不是子域名）
+- DNS-01 验证依赖 DuckDNS API，确认本机能访问 `www.duckdns.org`
+- 修改后在设置页**重新保存域名**即可重新触发签发
+
 ## 开发
 
 ```sh
